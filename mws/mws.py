@@ -11,6 +11,7 @@ import hmac
 import base64
 import utils
 import re
+
 try:
     from xml.etree.ElementTree import ParseError as XMLError
 except ImportError:
@@ -19,7 +20,6 @@ from time import strftime, gmtime
 
 from requests import request
 from requests.exceptions import HTTPError
-
 
 __all__ = [
     'Feeds',
@@ -36,17 +36,17 @@ __all__ = [
 # for a list of the end points and marketplace IDs
 
 MARKETPLACES = {
-    "CA" : "https://mws.amazonservices.ca", #A2EUQ1WTGCTBG2
-    "US" : "https://mws.amazonservices.com", #ATVPDKIKX0DER",
-    "DE" : "https://mws-eu.amazonservices.com", #A1PA6795UKMFR9
-    "ES" : "https://mws-eu.amazonservices.com", #A1RKKUPIHCS9HS
-    "FR" : "https://mws-eu.amazonservices.com", #A13V1IB3VIYZZH
-    "IN" : "https://mws.amazonservices.in", #A21TJRUUN4KGV
-    "IT" : "https://mws-eu.amazonservices.com", #APJ6JRA9NG5V4
-    "UK" : "https://mws-eu.amazonservices.com", #A1F83G8C2ARO7P
-    "JP" : "https://mws.amazonservices.jp", #A1VC38T7YXB528
-    "CN" : "https://mws.amazonservices.com.cn", #AAHKV2X7AFYLW
-    "MX" : "https://mws.amazonservices.com.mx", #A1AM78C64UM0Y8    
+    "CA": "https://mws.amazonservices.ca",  # A2EUQ1WTGCTBG2
+    "US": "https://mws.amazonservices.com",  # ATVPDKIKX0DER",
+    "DE": "https://mws-eu.amazonservices.com",  # A1PA6795UKMFR9
+    "ES": "https://mws-eu.amazonservices.com",  # A1RKKUPIHCS9HS
+    "FR": "https://mws-eu.amazonservices.com",  # A13V1IB3VIYZZH
+    "IN": "https://mws.amazonservices.in",  # A21TJRUUN4KGV
+    "IT": "https://mws-eu.amazonservices.com",  # APJ6JRA9NG5V4
+    "UK": "https://mws-eu.amazonservices.com",  # A1F83G8C2ARO7P
+    "JP": "https://mws.amazonservices.jp",  # A1VC38T7YXB528
+    "CN": "https://mws.amazonservices.com.cn",  # AAHKV2X7AFYLW
+    "MX": "https://mws.amazonservices.com.mx",  # A1AM78C64UM0Y8
 }
 
 
@@ -103,6 +103,7 @@ class DataWrapper(object):
     """
         Text wrapper in charge of validating the hash sent by Amazon.
     """
+
     def __init__(self, data, header):
         self.original = data
         if 'content-md5' in header:
@@ -156,12 +157,12 @@ class MWS(object):
             self.domain = MARKETPLACES[region]
         else:
             error_msg = "Incorrect region supplied ('%(region)s'). Must be one of the following: %(marketplaces)s" % {
-                "marketplaces" : ', '.join(MARKETPLACES.keys()),
-                "region" : region,
+                "marketplaces": ', '.join(MARKETPLACES.keys()),
+                "region": region,
             }
             raise MWSError(error_msg)
 
-    def make_request(self, extra_data, method="GET", **kwargs):
+    def request(self, extra_data, method="GET", **kwargs):
         """Make request to Amazon MWS API with these parameters
         """
 
@@ -180,13 +181,17 @@ class MWS(object):
         if self.auth_token:
             params['MWSAuthToken'] = self.auth_token
         params.update(extra_data)
-        request_description = '&'.join(['%s=%s' % (k, urllib.quote(params[k], safe='-_.~').encode('utf-8')) for k in sorted(params)])
+        request_description = '&'.join(
+            ['%s=%s' % (k, urllib.quote(params[k], safe='-_.~').encode('utf-8')) for k in sorted(params)])
         signature = self.calc_signature(method, request_description)
         url = '%s%s?%s&Signature=%s' % (self.domain, self.uri, request_description, urllib.quote(signature))
         headers = {'User-Agent': 'python-amazon-mws/0.0.1 (Language=Python)'}
         headers.update(kwargs.get('extra_headers', {}))
 
-        response = request(method, url, data=kwargs.get('body', ''), headers=headers)
+        return request(method, url, data=kwargs.get('body', ''), headers=headers)
+
+    def make_request(self, extra_data, method="GET", **kwargs):
+        response = self.request(extra_data, method, **kwargs)
         try:
             parsed_response = DictWrapper(response.content, extra_data.get("Action") + "Result")
         except XMLError:
@@ -207,7 +212,8 @@ class MWS(object):
     def calc_signature(self, method, request_description):
         """Calculate MWS signature to interface with Amazon
         """
-        sig_data = method + '\n' + self.domain.replace('https://', '').lower() + '\n' + self.uri + '\n' + request_description
+        sig_data = method + '\n' + self.domain.replace('https://',
+                                                       '').lower() + '\n' + self.uri + '\n' + request_description
         return base64.b64encode(hmac.new(str(self.secret_key), sig_data, hashlib.sha256).digest())
 
     def get_timestamp(self):
@@ -258,7 +264,7 @@ class Feeds(MWS):
                                  extra_headers={'Content-MD5': md, 'Content-Type': content_type})
 
     def get_feed_submission_list(self, feedids=None, max_count=None, feedtypes=None,
-                                    processingstatuses=None, fromdate=None, todate=None):
+                                 processingstatuses=None, fromdate=None, todate=None):
         """
         Returns a list of all feed submissions submitted in the previous 90 days.
         That match the query parameters.
@@ -267,7 +273,7 @@ class Feeds(MWS):
         data = dict(Action='GetFeedSubmissionList',
                     MaxCount=max_count,
                     SubmittedFromDate=fromdate,
-                    SubmittedToDate=todate,)
+                    SubmittedToDate=todate, )
         data.update(self.enumerate_param('FeedSubmissionIdList.Id', feedids))
         data.update(self.enumerate_param('FeedTypeList.Type.', feedtypes))
         data.update(self.enumerate_param('FeedProcessingStatusList.Status.', processingstatuses))
@@ -363,7 +369,6 @@ class Reports(MWS):
         data.update(self.enumerate_param('MarketplaceIdList.Id.', marketplaceids))
         return self.make_request(data)
 
-
     ### ReportSchedule ###
 
     def get_report_schedule_list(self, types=()):
@@ -387,7 +392,6 @@ class Orders(MWS):
     def list_orders(self, marketplaceids, created_after=None, created_before=None, lastupdatedafter=None,
                     lastupdatedbefore=None, orderstatus=(), fulfillment_channels=(),
                     payment_methods=(), buyer_email=None, seller_orderid=None, max_results='100'):
-
         data = dict(Action='ListOrders',
                     CreatedAfter=created_after,
                     CreatedBefore=created_before,
@@ -600,7 +604,6 @@ class OutboundShipments(MWS):
 
 
 class Recommendations(MWS):
-
     """ Amazon MWS Recommendations API """
 
     URI = '/Recommendations/2013-04-01'
